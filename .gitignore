@@ -1,0 +1,7 @@
+*.mp4
+*.srt
+results.json
+.env
+/.idea
+/.venv
+/images
