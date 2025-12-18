@@ -32,7 +32,7 @@ class VideoAnalyzerAgent:
             base_url='https://ark.cn-beijing.volces.com/api/v3',
             api_key=self.api_key
         )
-        self.model = "doubao-seed-1-8-preview-251128"
+        self.model = "doubao-seed-1-8"
     
     async def analyze_video(self, video_path: str, fps: float = 0.3) -> List[Dict]:
         """
@@ -252,4 +252,5 @@ async def main():
         print("未找到关键图片位置")
 
 if __name__ == "__main__":
+
     asyncio.run(main())
