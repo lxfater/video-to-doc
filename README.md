@@ -1,103 +1,120 @@
-# 视频分析AI Agent
+# 操作视频 → 步骤操作文档生成器
 
-使用火山引擎的doubao-seed-1.8模型直接分析视频，提取关键图片位置。
+将操作视频自动转换为带截图、带文字的步骤操作文档（Markdown + PDF）。
+
+默认采用**字幕驱动**模式：Whisper 提取语音生成带时间戳的字幕，AI 分析字幕文本识别操作步骤，成本低、速度快。也可选择上传视频给 AI 看画面的增强模式。
+
+## 工作流程
+
+1. **Whisper 生成字幕** — 调用本地 Whisper 从视频提取语音转文字（带时间戳）
+2. **AI 分析字幕** — 将字幕文本发送给 doubao 模型，识别操作步骤及最佳截图时间点，并给出自信度评分
+3. **生成截图** — 根据每个步骤的时间点，用 ffmpeg 从视频中截取画面
+4. **AI 看图增强** — 对自信度较低的步骤（最多 4 个），发送截图给 AI 看画面修正描述
+5. **生成操作文档** — AI 生成结构化的 Markdown 操作文档（可选联网搜索增强）
+6. **生成 PDF** — 将 Markdown 转为 PDF，截图自动嵌入
+
+所有产物（视频、字幕、截图、文档）统一输出到以视频名命名的文件夹中。
 
 ## 安装依赖
 
 ```bash
-pip install volcengine-python-sdk[ark] python-dotenv requests
+pip install -r requirements.txt
 ```
 
-## 配置API Key
+确保系统已安装 `ffmpeg` 和 `whisper`。
 
-### 方法一：使用.env文件（推荐）
+## 配置
 
-1. 复制.env.example文件为.env
-```bash
-copy .env.example .env
+在项目根目录创建 `.env` 文件：
+
+```env
+# 必填：火山引擎 ARK API Key
+ARK_API_KEY=your_ark_api_key
+
+# 可选：Whisper 模型（默认 base）
+WHISPER_MODEL=base
 ```
-
-2. 编辑.env文件，填入你的ARK API Key
-```
-ARK_API_KEY=your_actual_api_key_here
-```
-
-### 方法二：命令行参数
-
-在运行时通过--api_key参数传入
 
 ## 使用方法
 
-### 命令行方式（自动查找视频）
+### 基本用法
 
 ```bash
-# 自动查找当前目录第一个MP4文件，使用默认抽帧频率0.3帧/秒
-python video_analyzer_agent.py
+python video_analyzer_agent.py --video_path your_video.mp4
 ```
 
-### 命令行方式（指定视频文件和抽帧频率）
+### 使用已有字幕文件（跳过 Whisper）
 
 ```bash
-# 指定视频文件和抽帧频率（例如1帧/秒）
-python video_analyzer_agent.py --video_path your_video.mp4 --fps 1
+python video_analyzer_agent.py --video_path your_video.mp4 --srt_path subtitles.srt
 ```
 
-### 命令行方式（直接传入API Key）
+### 启用联网搜索增强（需要 API 支持）
 
 ```bash
-python video_analyzer_agent.py --api_key YOUR_ARK_API_KEY --video_path your_video.mp4
+python video_analyzer_agent.py --video_path your_video.mp4 --web_search
 ```
 
-### 代码调用（使用.env文件）
+### 视频上传分析模式（AI 看画面，较贵）
 
-```python
-from video_analyzer_agent import VideoAnalyzerAgent
-
-# 创建Agent（自动从.env文件读取API Key）
-agent = VideoAnalyzerAgent()
-
-# 分析视频
-results = agent.analyze_video("your_video.mp4", fps=0.5)
-
-# 保存结果
-agent.save_results(results, "results.json")
+```bash
+python video_analyzer_agent.py --video_path your_video.mp4 --use_video
 ```
 
-### 代码调用（直接传入API Key）
+### 完整参数
 
-```python
-from video_analyzer_agent import VideoAnalyzerAgent
+| 参数 | 说明 | 默认值 |
+|---|---|---|
+| `--video_path` | 视频文件路径 | 自动查找当前目录MP4 |
+| `--srt_path` | SRT字幕文件路径 | 无（自动用Whisper生成） |
+| `--output_dir` | 输出目录 | 以视频文件名命名 |
+| `--fps` | 抽帧频率（帧/秒） | 1 |
+| `--whisper_model` | Whisper模型 | base |
+| `--use_video` | 启用视频上传分析模式 | 关闭 |
+| `--file_id` | 已上传的视频文件ID | 无 |
+| `--max_vision` | AI 看图增强最大次数 | 4 |
+| `--web_search` | 启用联网搜索增强文档 | 关闭 |
+| `--api_key` | ARK API Key | 从.env读取 |
 
-# 创建Agent
-agent = VideoAnalyzerAgent(api_key="YOUR_ARK_API_KEY")
+## 输出示例
 
-# 分析视频
-results = agent.analyze_video("your_video.mp4")
+运行后会在输出文件夹中生成：
 
-# 保存结果
-agent.save_results(results, "results.json")
+```
+your_video/
+  your_video.mp4          ← 原始视频
+  your_video.srt          ← 字幕文件
+  images/
+    step_01.jpg ~ step_N.jpg  ← 每步截图
+  steps.json              ← 步骤分析数据
+  operation_guide.md      ← Markdown 操作文档
+  operation_guide.pdf     ← PDF 操作文档（图片嵌入）
 ```
 
-## 输出格式
+文档格式示例：
 
-```json
-[
-    {
-        "time": "01:23",
-        "reason": "这张图片展示了关键操作，信息量很大"
-    },
-    {
-        "time": "02:15",
-        "reason": "这张图片用PPT展示了关键技术概念"
-    }
-]
+```markdown
+# 操作指南：XXX
+
+## 步骤 1：打开设置页面
+
+![步骤1截图](images/step_01.jpg)
+
+点击屏幕左上角的菜单图标，在弹出的侧边栏中选择「设置」选项。
+
+## 步骤 2：修改配置
+
+![步骤2截图](images/step_02.jpg)
+
+在设置页面中找到「高级选项」，点击进入后修改相关配置项。
 ```
 
-## 注意事项
+## 致谢
 
-1. 需要先获取火山引擎ARK API Key
-2. 使用Files API上传视频，支持最大512MB的视频文件
-3. 支持的视频格式包括MP4、AVI、MOV等常见格式
-4. 分析结果会自动保存为JSON格式文件
-5. 抽帧频率（fps）参数控制分析精度，默认0.3帧/秒（每3秒抽1帧）
-6. 上传的视频文件默认存储7天，可以在多次请求中重复使用
+本项目基于 [tech-shrimp/video_2_markdown_doubao](https://github.com/tech-shrimp/video_2_markdown_doubao) 改造而来。原项目实现了视频转学习笔记的基本功能，本项目在此基础上进行了以下改进：
+
+- 新增字幕驱动模式，大幅降低 API 调用成本
+- 新增自信度评分 + AI 看图增强机制
+- 新增 PDF 输出
+- 新增联网搜索增强（可选）
+- 统一输出文件夹管理

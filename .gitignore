@@ -1,7 +1,11 @@
 *.mp4
 *.srt
 results.json
+steps.json
+operation_guide.md
 .env
 /.idea
 /.venv
 /images
+/lev8_compressed
+/doc

@@ -1,3 +1,5 @@
 volcengine-python-sdk[ark]
 python-dotenv
-requests
+openai-whisper
+markdown
+weasyprint
